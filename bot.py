@@ -1,8 +1,8 @@
 import os
 import re
 import time
-import redis
 import requests
+from pymongo import MongoClient
 from pyrogram import Client, filters
 from urllib.parse import urlparse
 from requests.exceptions import RequestException
@@ -10,13 +10,20 @@ from requests.exceptions import RequestException
 # Configuration
 API_ID = 22419004
 API_HASH = "34982b52c4a83c2af3ce8f4fe12fe4e1"
-BOT_TOKEN = "YOUR_BOT_TOKEN"
+BOT_TOKEN = "7718397631:AAEIEGqpOFgmwxWOcJ1Kqw7ionmtSAVZTX8"
 ADMINS = [6742022802, 7442532306]
 PRIVATE_CHAT_ID = -1002445495902
 DOWNLOAD_FOLDER = "/tmp/"
 
-# Redis Configuration
-REDIS_CONFIG = {
+# MongoDB Configuration
+MONGO_URI = "mongodb+srv://mrnoobx:DAZCdTczVWyECi04@cluster0.sedgwxy.mongodb.net/?retryWrites=true&w=majority"
+MONGO_DB_NAME = "terabox_cache"
+mongo_client = MongoClient(MONGO_URI)
+db = mongo_client[MONGO_DB_NAME]
+cache_collection = db["file_cache"]
+
+# Authentication Cookie
+COOKIE = {
     "csrfToken": "m_zbAV1arBvXCvTgmFvSluXY",
     "browserid": "EAaVwqpE6IPuBWAbOmlwEa-HARfMNQSSWLn9wiOXV1pWAEArqSzqtnmnkqM",
     "lang": "en",
@@ -25,23 +32,6 @@ REDIS_CONFIG = {
     "ndus": "YuaYNCMteHuiIaOZqGpTf8Z9-n1Si4erYpgWHcaX",
     "ab_sr": "1.0.1_ODA4NTRlNzE0MjVkYzczZjZjNmQ3NGI0MzZjNTIxNGI1MThmNjdmZTNlM2I1ZmU5N2E0NmY5Mjg2OTdjMDg5NzM2NDhiZWRlNGFjY2RiZTNhNzQ2YmEwNzAwNzJhZGQ3ZDNiOTY3ZjNjYjVhZGZiODA4ZWU5ZDUxZjZkMjk0NTYzOWYyYzVkZDFhZmRmM2RhNjUyNDA5YTBjZjk0MDVlZg==",
     "ndut_fmt": "426D9C20125DC8DFB9349A68EB0F767398283E07567B9C028271312D315A284E"
-}
-
-# Initialize Redis
-redis_client = redis.StrictRedis(
-    host=REDIS_CONFIG["HOST"],
-    port=REDIS_CONFIG["PORT"],
-    username=REDIS_CONFIG["USERNAME"],
-    password=REDIS_CONFIG["PASSWORD"],
-    decode_responses=True
-)
-
-# Authentication Cookie
-COOKIE = {
-    "csrfToken": "m_zbAV1arBvXCvTgmFvSluXY",
-    "browserid": "EAaVwqpE6IPuBWAbOmlwEa-HARfMNQSSWLn9wiOXV1pWAEArqSzqtnmnkqM",
-    "lang": "en",
-    "TSID": "RgCB6tEItxCB33EMPKyzutFSBMmUxfjl"
 }
 
 class TeraBoxDownloader:
@@ -66,9 +56,10 @@ class TeraBoxDownloader:
             print("Cooldown or invalid URL.")
             return None
 
-        cached_result = redis_client.get(surl)
+        # Check MongoDB cache
+        cached_result = cache_collection.find_one({"surl": surl})
         if cached_result:
-            return eval(cached_result)
+            return cached_result["data"]
 
         response = self.session.get(url, headers=self.headers)
         if response.status_code != 200:
@@ -106,7 +97,8 @@ class TeraBoxDownloader:
             "size_bytes": file_info.get("size")
         }
 
-        redis_client.setex(surl, 3600, str(result))
+        # Store in MongoDB cache
+        cache_collection.insert_one({"surl": surl, "data": result, "timestamp": time.time()})
         return result
 
     def download_file(self, url, file_name):
