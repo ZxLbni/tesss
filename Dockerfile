@@ -1,15 +1,17 @@
-# Use the official Python image.
+# Use an official Python runtime as a parent image
 FROM python:3.9
 
-# Set the working directory.
+# Set the working directory in the container
 WORKDIR /app
 
-# Copy requirements.txt and install dependencies.
-COPY requirements.txt requirements.txt
-RUN pip install -r requirements.txt
+# Copy the current directory contents into the container at /app
+COPY . /app
 
-# Copy the rest of the application code.
-COPY . .
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Start the bot
-CMD ["python", "bot.py"]
+# Make port 5000 available to the world outside this container
+EXPOSE 5000
+
+# Run app.py when the container launches
+CMD ["python", "app.py"]
